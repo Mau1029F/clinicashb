@@ -1774,6 +1774,79 @@ window.addEventListener("scroll", () => {
 backToTopBtn.addEventListener("click", () => {
   window.scrollTo({ top: 0, behavior: "smooth" });
 });
+
+// ---- Modo Reagendar (via link do e-mail) ----
+(function() {
+  const p = new URLSearchParams(window.location.search);
+  const row = p.get("reagendar");
+  if (!row) return;
+
+  const colaborador = decodeURIComponent(p.get("c") || "");
+  const cidade      = decodeURIComponent(p.get("ci") || "");
+  const tipo        = decodeURIComponent(p.get("t") || "");
+
+  // Cria overlay
+  const overlay = document.createElement("div");
+  overlay.style.cssText =
+    "position:fixed;inset:0;background:#f3f4f6;z-index:9999;display:flex;" +
+    "align-items:center;justify-content:center;padding:20px;";
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:32px;max-width:460px;width:100%;
+                box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+      <h2 style="margin:0 0 4px;font-size:20px;color:#111827;">📅 Solicitar reagendamento</h2>
+      <p style="color:#6b7280;font-size:14px;margin:0 0 24px;">${colaborador} — ${cidade} (${tipo})</p>
+      <label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;">
+        Nova data preferida *
+      </label>
+      <input id="reaData" type="date" required style="width:100%;box-sizing:border-box;padding:10px 12px;
+        border:1.5px solid #d1d5db;border-radius:8px;font-size:14px;margin-bottom:16px;">
+      <label style="display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;">
+        Motivo / observações (opcional)
+      </label>
+      <textarea id="reaObs" rows="3" placeholder="Ex: colaborador não pode nessa data..."
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #d1d5db;
+               border-radius:8px;font-size:14px;font-family:inherit;resize:vertical;"></textarea>
+      <button id="reaEnviarBtn" style="width:100%;margin-top:20px;padding:14px;background:#d97706;
+        color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;">
+        📤 Enviar solicitação
+      </button>
+      <p id="reaMsg" style="text-align:center;margin-top:12px;font-size:14px;color:#6b7280;"></p>
+      <p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:16px;">
+        Mastermedic — Saúde Ocupacional
+      </p>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  document.getElementById("reaEnviarBtn").addEventListener("click", async () => {
+    const novaData = document.getElementById("reaData").value;
+    const obs      = document.getElementById("reaObs").value.trim();
+    const btn      = document.getElementById("reaEnviarBtn");
+    const msg      = document.getElementById("reaMsg");
+    if (!novaData) { msg.textContent = "Por favor, selecione a nova data."; return; }
+    btn.textContent = "⏳ Enviando...";
+    btn.disabled = true;
+    try {
+      await fetch(SHEET_SCRIPT_URL, {
+        method: "POST", mode: "no-cors",
+        body: JSON.stringify({
+          action: "reagendar",
+          row_index: parseInt(row),
+          colaborador, cidade, tipo,
+          nova_data: novaData,
+          obs_reagendamento: obs
+        })
+      });
+      btn.style.display = "none";
+      msg.style.color = "#16a34a";
+      msg.textContent = "✅ Solicitação enviada! A Mastermedic entrará em contato.";
+    } catch(err) {
+      btn.textContent = "📤 Enviar solicitação";
+      btn.disabled = false;
+      msg.style.color = "#dc2626";
+      msg.textContent = "Erro ao enviar. Tente novamente.";
+    }
+  });
+})();
 </script>
 </body>
 </html>
