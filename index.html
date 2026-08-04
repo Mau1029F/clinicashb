@@ -18,6 +18,10 @@ function autorizarPermissoes() {
 // HELPERS: notificação interna + páginas HTML de resposta
 // =========================================================
 
+function clearCalendarCache() {
+  try { CacheService.getScriptCache().remove('calendar_events'); } catch(ce) {}
+}
+
 function notifyMastermedic(titulo, colaborador, cidade, tipo, extra) {
   try {
     const msg = encodeURIComponent(`${titulo}!\nColaborador: ${colaborador}\nCidade: ${cidade}${extra ? '\n' + extra : ''}`);
@@ -116,6 +120,7 @@ function handleEmailAction(action, row) {
 
     if (action === 'confirmar') {
       sheet.getRange(row, 7).setValue('Agendado');
+      clearCalendarCache();
       notifyMastermedic('✅ Confirmado pelo RH', colaborador, cidade, tipo, '');
       return htmlResponse(
         '✅ Presença confirmada!',
@@ -126,6 +131,7 @@ function handleEmailAction(action, row) {
 
     if (action === 'cancelar') {
       sheet.getRange(row, 7).setValue('Cancelado');
+      clearCalendarCache();
       notifyMastermedic('❌ Cancelado pelo RH', colaborador, cidade, tipo, '');
       return htmlResponse(
         '❌ Agendamento cancelado',
@@ -158,6 +164,7 @@ function handleReagendar(params) {
 
     sheet.getRange(row, 7).setValue('Reagendado');
     if (novaData) sheet.getRange(row, 5).setValue(novaData); // E: Data Preferida
+    clearCalendarCache();
 
     const extra =
       `Nova data preferida: ${novaData || 'Não especificada'}\nMotivo: ${obsRea || '—'}`;
@@ -190,6 +197,7 @@ function doPost(e) {
       const obsRea   = data.obs_reagendamento || '';
       sheet.getRange(row, 7).setValue('Reagendado');
       if (novaData) sheet.getRange(row, 5).setValue(novaData);
+      clearCalendarCache();
       const extra = `Nova data preferida: ${novaData || 'Não especificada'}\nMotivo: ${obsRea || '—'}`;
       notifyMastermedic('📅 RH solicita reagendamento', data.colaborador || '', data.cidade || '', data.tipo || '', extra);
       return ContentService
@@ -216,6 +224,8 @@ function doPost(e) {
         const existing = sheet.getRange(row, 13).getValue() || '';
         sheet.getRange(row, 13).setValue(existing ? entry + '\n' + existing : entry);
       }
+
+      clearCalendarCache();
 
       if (data.notify !== false &&
           (data.status === 'Agendado' || data.status === 'Reagendado' || data.status === 'Aguardando confirmação') &&
@@ -390,6 +400,7 @@ function doPost(e) {
       '',                           // L: Obs Mastermedic
       `${tsHist} — Solicitado`      // M: Histórico
     ]);
+    clearCalendarCache();
 
     try {
       const msg = encodeURIComponent(
@@ -538,6 +549,13 @@ function doGet(e) {
   }
 
   try {
+    // Cache de 30s para acelerar recarregamentos consecutivos do calendário
+    const cache  = CacheService.getScriptCache();
+    const cached = cache.get('calendar_events');
+    if (cached) {
+      return ContentService.createTextOutput(cached).setMimeType(ContentService.MimeType.JSON);
+    }
+
     const ss    = SpreadsheetApp.openById(SHEET_ID);
     const sheet = ss.getSheetByName('Agendamentos');
     const rows  = sheet.getDataRange().getValues();
@@ -569,8 +587,11 @@ function doGet(e) {
       });
     }
 
+    const json = JSON.stringify(events);
+    try { cache.put('calendar_events', json, 30); } catch(ce) {}
+
     return ContentService
-      .createTextOutput(JSON.stringify(events))
+      .createTextOutput(json)
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch(err) {
